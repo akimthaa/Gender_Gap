@@ -1,0 +1,387 @@
+---
+title: "FDA_Project"
+author: "Sanskriti_Aath_Yogi"
+date: "2024-11-05"
+output: html_document
+---
+```{r}
+#install.packages("forecast")
+```
+```{r}
+# Load the dataset
+data <- read.csv("/Users/sanskritir/Downloads/Gender Inequality Index.csv")
+head(data,6)
+```
+```{r}
+str(data)
+summary(data)
+```
+```{r}
+# Load necessary library
+#install.packages("ggplot2")
+library(ggplot2)
+
+# Filter data for a specific country 
+afghanistan_data <- data[data$Country == "India", ]
+
+# Create a line plot for Gender Inequality Index over time
+years <- 1990:2021
+gii_values <- as.numeric(afghanistan_data[, 9:40]) # Select GII columns
+
+# Create a data frame for plotting
+plot_data <- data.frame(Year = years, GII = gii_values)
+
+# Plot the data
+ggplot(plot_data, aes(x = Year, y = GII)) +
+  geom_line(color = "blue", size = 1.2) +
+  geom_point(color = "red", size = 2) +
+  labs(title = "Gender Inequality Index Over Time (India)",
+       x = "Year", y = "Gender Inequality Index") +
+  theme_minimal()
+```
+```{r}
+library(ggplot2)
+# Select relevant columns: Country and GII for 2021
+gii_2021 <- data[, c("Country", "Gender.Inequality.Index..2021.")]
+
+# Remove missing values
+gii_2021 <- na.omit(gii_2021)
+
+# Create a bar plot for GII in 2021 for a subset of countries (e.g., top 10)
+top_countries <- head(gii_2021[order(gii_2021$Gender.Inequality.Index..2021., decreasing = TRUE), ], 10)
+
+# Plot the data
+ggplot(top_countries, aes(x = reorder(Country, -Gender.Inequality.Index..2021.), y = Gender.Inequality.Index..2021.)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Top 10 Countries with Highest Gender Inequality Index (2021)",
+       x = "Country", y = "Gender Inequality Index (2021)") +
+  coord_flip() +
+  theme_minimal()
+```
+
+```{r}
+##ARIMA MODEL
+library(forecast)
+# Adjusted grep pattern to match the format "Gender.Inequality.Index..YYYY."
+gii_columns <- grep("^Gender\\.Inequality\\.Index\\.\\.\\d{4}\\.$", names(data), value = TRUE)
+print(gii_columns)  # Print the columns found to confirm
+
+# Check if any GII columns were found
+if (length(gii_columns) == 0) {
+  stop("No GII columns found. Please check the column names in the dataset.")
+}
+
+# Calculate the average GII for each year across all countries
+gii_yearly_avg <- colMeans(data[ , gii_columns], na.rm = TRUE)
+print(gii_yearly_avg)  # Print the yearly averages to ensure they contain values
+
+# Ensure there is data to proceed
+if (length(gii_yearly_avg) == 0) {
+  stop("No GII data found for the selected columns.")
+}
+
+# Convert the averages to a time series (starting in 1990, with yearly frequency)
+gii_ts <- ts(gii_yearly_avg, start = 1990, frequency = 1)
+
+# Fit an ARIMA model
+model <- auto.arima(gii_ts)
+
+# Forecast for the next 10 years
+forecast_values <- forecast(model, h = 10)
+forecast_values
+
+# Extract the predicted values
+predicted_values <- as.numeric(forecast_values$mean)
+
+# Plot the forecast
+plot(forecast_values, main = "Arima Model Forecast of Global Average GII for the Next 10 Years")
+
+```
+```{r}
+# Create a vector of actual GII values for the next 10 years (replace with real values if available)
+actual_future_gii <- c(0.339, 0.335, 0.3305, 0.32, 0.321, 0.316, 0.312, 0.307, 0.302, 0.298)
+
+# Create a data frame for evaluation
+future_years <- data.frame(Year = (2022:2031))
+gii_evaluation <- data.frame(
+  Year = future_years$Year,
+  Predicted = predicted_values,
+  Actual = actual_future_gii
+)
+
+# Print the evaluation table
+print(gii_evaluation)
+
+# Calculate performance metrics
+MAE <- mean(abs(gii_evaluation$Actual - gii_evaluation$Predicted))
+MSE <- mean((gii_evaluation$Actual - gii_evaluation$Predicted)^2)
+RMSE <- sqrt(MSE)
+R_squared <- 1 - (sum((gii_evaluation$Actual - gii_evaluation$Predicted)^2) / 
+                    sum((gii_evaluation$Actual - mean(gii_evaluation$Actual))^2))
+
+# Print the performance metrics
+print("ARIMA Model Performance Metrics")
+print(paste("Mean Absolute Error (MAE):", round(MAE, 4)))
+print(paste("Mean Squared Error (MSE):", round(MSE, 4)))
+print(paste("Root Mean Squared Error (RMSE):", round(RMSE, 4)))
+print(paste("R-squared:", round(R_squared, 4)))
+
+
+
+```
+
+```{r}
+#LINEAR REGRESSION
+# Convert the years to a numeric vector and create a data frame for modeling
+years <- 1990:(1990 + length(gii_yearly_avg) - 1)
+gii_df <- data.frame(Year = years, GII = gii_yearly_avg)
+
+# Fit a linear regression model
+linear_model <- lm(GII ~ Year, data = gii_df)
+
+# Predict the next 10 years
+future_years <- data.frame(Year = (max(years) + 1):(max(years) + 10))
+predictions <- predict(linear_model, newdata = future_years)
+predictions
+
+# Combine past data with predictions for plotting
+gii_combined <- c(gii_yearly_avg, predictions)
+years_combined <- c(years, future_years$Year)
+
+# Plot the historical data and predictions
+plot(years_combined, gii_combined, type = "l", col = "blue",
+     xlab = "Year", ylab = "Gender Inequality Index",
+     main = "Linear Regression Forecast of Global Average GII for the Next 10 Years")
+points(future_years$Year, predictions, col = "red", pch = 19)
+legend("topright", legend = c("Historical Data", "Predictions"),
+       col = c("blue", "red"), lty = 1, pch = c(NA, 19))
+```
+```{r}
+# Assuming you have actual GII data for the years you predicted
+# Create a vector of actual GII values for the next 4 years (for example purposes)
+actual_future_gii <- c(0.336,0.331,0.326,0.3213,0.316,0.311,0.306,0.301,0.296,0.291)  # Replace with your actual values
+
+# Combine actual values with predicted values for evaluation
+gii_evaluation <- data.frame(Year = future_years$Year,
+                              Predicted = predictions,
+                              Actual = actual_future_gii)
+
+# Calculate performance metrics
+MAE <- mean(abs(gii_evaluation$Actual - gii_evaluation$Predicted))
+MSE <- mean((gii_evaluation$Actual - gii_evaluation$Predicted)^2)
+RMSE <- sqrt(MSE)
+R_squared <- 1 - (sum((gii_evaluation$Actual - gii_evaluation$Predicted)^2) / 
+                    sum((gii_evaluation$Actual - mean(gii_evaluation$Actual))^2))
+
+# Print the performance metrics
+print(paste("Linear Regression Model"))
+print(paste("Mean Absolute Error (MAE):", MAE))
+print(paste("Mean Squared Error (MSE):", MSE))
+print(paste("Root Mean Squared Error (RMSE):", RMSE))
+print(paste("R-squared:", R_squared))
+
+```
+```{r}
+#ENSEMBLE MODEL
+# Adjust grep pattern to match column format "Gender.Inequality.Index..YYYY."
+gii_columns <- grep("^Gender\\.Inequality\\.Index\\.\\.\\d{4}\\.$", names(data), value = TRUE)
+print(gii_columns)
+
+# Check if GII columns were found
+if (length(gii_columns) == 0) {
+  stop("No GII columns found. Please check the column names in the dataset.")
+}
+
+# Calculate the average GII for each year across all countries
+gii_yearly_avg <- colMeans(data[ , gii_columns], na.rm = TRUE)
+print(gii_yearly_avg)
+
+# Ensure data is valid
+if (length(gii_yearly_avg) == 0) {
+  stop("No GII data found for the selected columns.")
+}
+
+# Convert to a time series object
+gii_ts <- ts(gii_yearly_avg, start = 1990, frequency = 1)
+
+### ARIMA Model
+arima_model <- auto.arima(gii_ts)
+arima_forecast <- forecast(arima_model, h = 10)
+arima_predictions <- as.numeric(arima_forecast$mean)
+
+### Exponential Smoothing Model
+ets_model <- ets(gii_ts)
+ets_forecast <- forecast(ets_model, h = 10)
+ets_predictions <- as.numeric(ets_forecast$mean)
+
+### Linear Regression Model
+years <- as.numeric(time(gii_ts))
+lm_model <- lm(gii_yearly_avg ~ years)
+future_years <- data.frame(years = seq(max(years) + 1, max(years) + 10))
+lm_predictions <- predict(lm_model, newdata = future_years)
+
+### Ensemble Model
+# Take the average of predictions from the three models
+ensemble_predictions <- rowMeans(cbind(arima_predictions, ets_predictions, lm_predictions))
+
+# Create a data frame for all predictions
+forecast_df <- data.frame(
+  Year = seq(2022, 2031),
+  ARIMA = arima_predictions,
+  ETS = ets_predictions,
+  Linear_Regression = lm_predictions,
+  Ensemble = ensemble_predictions
+)
+
+print(forecast_df)
+
+# Plot the predictions
+plot(
+  seq(1990, 2021), gii_yearly_avg, type = "l", col = "black", lwd = 2,
+  xlab = "Year", ylab = "GII", main = "GII Forecasts Using Ensemble Model"
+)
+
+
+
+
+```
+```{r}
+### Evaluate Performance (Optional: Use actual future GII values if available)
+actual_future_gii <- c(0.339, 0.335, 0.3305, 0.32, 0.321, 0.316, 0.312, 0.307, 0.302, 0.298)  # Replace with real data if available
+evaluation_df <- data.frame(
+  Year = forecast_df$Year,
+  Predicted_Ensemble = ensemble_predictions,
+  Actual = actual_future_gii
+)
+
+# Calculate performance metrics
+MAE <- mean(abs(evaluation_df$Actual - evaluation_df$Predicted_Ensemble))
+MSE <- mean((evaluation_df$Actual - evaluation_df$Predicted_Ensemble)^2)
+RMSE <- sqrt(MSE)
+R_squared <- 1 - (sum((evaluation_df$Actual - evaluation_df$Predicted_Ensemble)^2) / 
+                    sum((evaluation_df$Actual - mean(evaluation_df$Actual))^2))
+
+# Print performance metrics
+print("Ensemble Model Performance Metrics")
+print(paste("Mean Absolute Error (MAE):", round(MAE, 4)))
+print(paste("Mean Squared Error (MSE):", round(MSE, 4)))
+print(paste("Root Mean Squared Error (RMSE):", round(RMSE, 4)))
+print(paste("R-squared:", round(R_squared, 4)))
+
+```
+```{r}
+#NEURAL NETWORK
+#install.packages("nnet")
+library(nnet)
+# Adjust grep pattern to match columns for GII values (e.g., "Gender.Inequality.Index..1990.")
+gii_columns <- grep("^Gender\\.Inequality\\.Index\\.\\.\\d{4}\\.$", names(data), value = TRUE)
+
+# Check if columns are correctly identified
+if (length(gii_columns) == 0) {
+  stop("No GII columns found. Please check the column names in the dataset.")
+}
+
+# Calculate the average GII for each year across all countries
+gii_yearly_avg <- colMeans(data[, gii_columns], na.rm = TRUE)
+
+# Ensure there is data to proceed
+if (length(gii_yearly_avg) == 0) {
+  stop("No data available for GII.")
+}
+
+# Prepare the data
+years <- as.numeric(sub("Gender\\.Inequality\\.Index\\.\\.(\\d{4})\\.", "\\1", gii_columns))
+gii_data <- data.frame(Year = years, GII = gii_yearly_avg)
+
+# Normalize the data for neural network training
+normalize <- function(x) (x - min(x)) / (max(x) - min(x))
+gii_data$GII_norm <- normalize(gii_data$GII)
+
+# Train/Test Split
+train_data <- gii_data[gii_data$Year <= max(gii_data$Year) - 10, ]
+test_data <- gii_data[gii_data$Year > max(gii_data$Year) - 10, ]
+
+# Neural Network Model
+set.seed(123)  # For reproducibility
+nn_model <- nnet(GII_norm ~ Year, data = train_data, size = 3, linout = TRUE, skip = TRUE)
+
+# Predict on the training data
+train_data$Predicted_norm <- predict(nn_model, train_data)
+
+# De-normalize predictions
+denormalize <- function(x, orig) x * (max(orig) - min(orig)) + min(orig)
+train_data$Predicted <- denormalize(train_data$Predicted_norm, gii_data$GII)
+
+# Predict the next 10 years
+future_years <- data.frame(Year = seq(max(gii_data$Year) + 1, max(gii_data$Year) + 10))
+future_years$Predicted_norm <- predict(nn_model, future_years)
+future_years$Predicted <- denormalize(future_years$Predicted_norm, gii_data$GII)
+
+# Combine train, test, and future data for visualization
+combined_data <- rbind(
+  data.frame(Year = train_data$Year, GII = train_data$GII, Type = "Actual"),
+  data.frame(Year = train_data$Year, GII = train_data$Predicted, Type = "Predicted"),
+  data.frame(Year = future_years$Year, GII = future_years$Predicted, Type = "Forecast")
+)
+
+# Plot the results
+library(ggplot2)
+ggplot(combined_data, aes(x = Year, y = GII, color = Type)) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(
+    title = "Neural Network Model for Gender Inequality Index",
+    x = "Year",
+    y = "Gender Inequality Index"
+  ) +
+  theme_minimal() +
+  scale_color_manual(values = c("Actual" = "blue", "Predicted" = "green", "Forecast" = "red"))
+
+```
+```{r}
+# Evaluation Metrics for Training Data
+#install.packages("Metrics")
+library(Metrics)
+
+# Assuming the neural network model has been trained and predictions have been made
+
+# Function to calculate R-squared
+r_squared <- function(actual, predicted) {
+  ss_total <- sum((actual - mean(actual))^2)
+  ss_residual <- sum((actual - predicted)^2)
+  return(1 - (ss_residual / ss_total))
+}
+
+# Calculate predicted values on training data
+train_data$Predicted <- predict(nn_model, train_data)
+
+# Calculate MSE, RMSE, MAE, and R-squared for training data
+mse_train <- mse(train_data$GII, train_data$Predicted)
+rmse_train <- rmse(train_data$GII, train_data$Predicted)
+mae_train <- mae(train_data$GII, train_data$Predicted)
+r2_train <- r_squared(train_data$GII, train_data$Predicted)
+
+cat("Training Data Metrics:\n")
+cat("MSE:", mse_train, "\n")
+cat("RMSE:", rmse_train, "\n")
+cat("MAE:", mae_train, "\n")
+cat("R-squared:", r2_train, "\n")
+
+# Predict on test data
+test_data$Predicted <- predict(nn_model, test_data)
+
+# Calculate MSE, RMSE, MAE, and R-squared for test data
+mse_test <- mse(test_data$GII, test_data$Predicted)
+rmse_test <- rmse(test_data$GII, test_data$Predicted)
+mae_test <- mae(test_data$GII, test_data$Predicted)
+r2_test <- r_squared(test_data$GII, test_data$Predicted)
+
+cat("\nTest Data Metrics:\n")
+cat("MSE:", mse_test, "\n")
+cat("RMSE:", rmse_test, "\n")
+cat("MAE:", mae_test, "\n")
+cat("R-squared:", r2_test, "\n")
+
+
+```
+
